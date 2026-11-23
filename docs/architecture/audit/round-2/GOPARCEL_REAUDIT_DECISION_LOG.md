@@ -1,0 +1,52 @@
+# GoParcel — Re-audit Decision Log (Round 2)
+
+Re-audit date 22 November 2026. This log records the judgement calls made in the round-2 audit of architecture v0.2, and lists only **new** questions for the product owner. PD-01..PD-20 are not asked again. Where a question clarifies how a recorded decision applies to a case it did not address, it names that decision.
+
+## 1. Method and judgement calls
+
+| ID | Decision / assumption | Reason |
+|---|---|---|
+| RD-01 | Sources read in full: architecture v0.2; round-1 audit report and remediation plan. Read in the parts relevant to architecture: PRD v2.1 Sections 4 (AUTH, KYC, TRIP, SHIP, MATCH, PRICE, BOOK, PAY, LEDGER, HAND, NOTIF, DISP, RATE, FRAUD, SUP, ADMIN, PRIV), 6, 7, and Appendices A, C (incl. C.7) and D. Round-1 readiness report, decision log and risk register skimmed. v0.1 used only for reference. | Brief instruction. |
+| RD-02 | PRD Appendix C.7 (PD-01..PD-20) overrides Section 4 text where they conflict. The four separate PRD files carry a SUPERSEDED banner (PD-20) and were not used as sources. | PRD C.7 header; PD-20. |
+| RD-03 | No code, test or vendor check was run. Web search was not used in this round. Library and vendor statements are labelled unverified (AUD2-025). No test result is claimed anywhere. | Honesty about evidence. |
+| RD-04 | Status "Fixed" means the original round-1 problem is closed by the v0.2 text. A new defect introduced by the fix is raised as a new AUD2 finding and cross-referenced, instead of reopening the old one, unless the original problem itself still occurs. Example: AUD-009's double-pay risk is still possible through AUD2-002, so AUD-009 is "Partially fixed". AUD-012's recovery design is complete but breaks the dependency list, so AUD-012 is "Fixed" and the break is AUD2-004. | Separate verification from new discovery; avoid double counting. |
+| RD-05 | AUD-044 is marked "No longer applicable" because it was a PRD documentation issue that the product owner resolved (PD-20); the architecture has nothing to do. | Strictness without penalising the architecture for product-side items. |
+| RD-06 | Items that v0.2 explicitly defers with a named owner and trigger, and that round 1 placed at P1 or P2 (full threat model, per-module API and schema documents, cost numbers), are "Partially fixed", not defects. No new finding was raised for the deferral itself. | Round-1 priorities accepted deferral to those gates. |
+| RD-07 | Severity reflects impact if built **as written**, for the controlled pilot with real money (PC-03). HIGH is reserved for: (a) bypass of a confirmed risk control (AUD2-001), (b) a path to paying money twice (AUD2-002), (c) divergence between custody records and physical custody (AUD2-003), (d) a P0-class kernel rule that cannot be followed (AUD2-004). | Calibration consistent with round 1 (AL-05, AL-06). |
+| RD-08 | AUD2-004 is rated HIGH although its round-1 counterpart AUD-014 was MEDIUM. Round 1 placed it in P0, v0.2 made the list "exhaustive" and CI-enforced, and several contradicting flows are money- or state-critical (dues hard block, returns, booking completion). | Impact on build step 1. |
+| RD-09 | No new CRITICAL was raised. The funds-flow residuals (composite payouts, escrow release, lost/returned outcomes) are serious but bounded design corrections inside a defined model, and daily reconciliation would surface them within a day. | Calibration; avoid inflating severity. |
+| RD-10 | Verdict CONDITIONALLY READY rather than NOT READY: no CRITICAL is open; all round-1 P0 items are reflected (two partly); the round-1 exit criteria (P0 items in v0.2, six P1 questions answered) are met. Not DEVELOPMENT READY because HIGH findings and a P0-class item (AUD2-004) are open. | The brief's readiness rule and the round-1 exit criteria. |
+| RD-11 | Lock-order analysis covered only the rows each flow names. A flow is "deadlock-free" if every shared row is taken in the same relative order in both flows. Inserts of new rows were treated as non-conflicting, except for unique-index waits, which follow the same order. | Explicit method for §4.1 of the report. |
+| RD-12 | Posting balance was checked symbolically (P = E + C + G; N = X − D − W; R + K = P). It was not checked against real GST/TDS treatment, which is the CA's job (T-6). | Scope. |
+| RD-13 | No prices, fees, shares, thresholds or durations were invented. Where v0.2 introduced a number with product effect (`CFG-PAY-EXPIRY-MAX-DEFER` = 15 min), it is raised for approval (AUD2-010, Q2-03). | Brief instruction. |
+| RD-14 | Section references use the exact v0.2 headings. No line numbers are given. | Brief instruction. |
+| RD-15 | A [VERIFY] fallback was judged "credible" when it keeps the same correctness guarantee without the unverified feature. Example: the payable-item partial unique index, not the pg-boss singleton key, is what prevents double payout of an item. | Feasibility check without web access. |
+
+## 2. Items needing approval outside the architect
+
+| ID | Item | Findings | Approver |
+|---|---|---|---|
+| RA-01 | Max-defer expiry without a provider answer (allowed or not under PD-08) | AUD2-010 | Product owner |
+| RA-02 | Which booking states count toward the custody-value cap | AUD2-001 | Product owner |
+| RA-03 | Extended posting table (COD refusal, overpayment refund, zero-net payout, escrow releases M12/M13, sender-dues write-off) | AUD2-007, 008, 009 | CA (T-6) |
+| RA-04 | Whether one provider transfer can combine escrow and merchant funds | AUD2-002 | Vendor (T-1); product owner if PD-09 must bend |
+| RA-05 | Money outcome for LOST / RETURNED / ABANDONED across online, cash and COD (extends T-15) | AUD2-015 | Product owner; counsel for ABANDONED |
+| RA-06 | Counsel view on the funds-flow model before Payments is built, or explicit product-owner acceptance to build Stage A on it pending counsel | AUD-001 residual | Product owner; counsel |
+
+## 3. New questions for the product owner
+
+| ID | Question | Why it matters | Options (auditor's recommendation in bold) | Findings |
+|---|---|---|---|---|
+| Q2-01 | While a pickup or delivery code entry may be queued offline (between the scheduled stop time and the sync deadline), may the sender cancel or report a traveler no-show, and may the traveler report a sender no-show? | Otherwise a booking can be cancelled and refunded while the traveler holds the parcel. | **Hold such reports as "pending sync" until the sync deadline, then apply them if no verification arrived**; or apply immediately and let ops resolve conflicts | AUD2-003 |
+| Q2-02 | For the custody-value cap (PD-10), which bookings count: awaiting payment, confirmed and in fulfilment, or only parcels actually picked up? | Excluding bookings awaiting payment lets a new traveler exceed the cap. | **Awaiting payment + confirmed + in fulfilment**; or confirmed + in fulfilment and also re-check at payment | AUD2-001 |
+| Q2-03 | If the payment provider cannot be reached at the payment deadline, may the booking expire after a fixed wait (and an on-time payment later be refunded), or must it stay reserved until the provider answers? (Applies PD-08 to an outage.) | PD-08 says captured-before-deadline payments confirm; v0.2 expires after 15 min regardless. | **Stay reserved until the provider answers, capped at departure minus booking cutoff, with an ops alert**; or approve the fixed wait | AUD2-010 |
+| Q2-04 | If the payment provider cannot send escrow earnings and GoParcel-funded credits as one transfer, is it acceptable for a traveler to receive two transfers in one daily run? (Applies PD-09.) | Decides the payout data model and how partial failures are handled. | **Yes, two transfers (one per funding source), each shown on the payout statement**; or delay merchant-funded credits to a separate run | AUD2-002 |
+| Q2-05 | If a delivery was verified but the recipient proves they never received the parcel, may ops reopen custody (DELIVERED → exception) to recover the parcel, or is the outcome money-only? | No state path exists today to recover a parcel after a false delivery. | **Allow ops to reopen custody under an open dispute, with reason and two-person approval**; or money-only | AUD2-013 |
+| Q2-06 | When the same person is owed sender compensation and also owes dues (as sender or traveler), should the compensation be netted against those dues? | v0.2 says sender payouts never net dues; the PRD is silent. | **Net against the same person's dues, shown line by line**; or never net | AUD2-020 |
+| Q2-07 | For a **cash** booking where the parcel is lost by the traveler, does the sender get the cash price back in addition to compensation up to the declared value? Please answer together with T-15 (online LOST/RETURNED) and also cover COD and RETURNED. | v0.2 seems to decide "yes" for cash while leaving online open. | No auditor recommendation; product choice | AUD2-015 |
+| Q2-08 | May a traveler who is suspended or restricted still complete a pickup on an already-confirmed booking while ops decides? | Pickup does not check account status today. | **No: pickup blocked; ops resolves the booking**; or allowed | AUD2-006 |
+| Q2-09 | After a mismatch decline at pickup, should an online sender be refunded straight away (assuming no fault) while ops reviews, or wait for the decision? And if ops finds sender fault, does the early- or late-cancellation fee apply? | Money is held up to the review SLA while the parcel can already be rebooked and paid again. | **Wait for the decision; apply the late-cancellation row on sender fault** (current v0.2 reading); or provisional refund | AUD2-019 |
+| Q2-10 | If WhatsApp and SMS are both down, should ops be able to verify a recipient by masked call and issue a one-time delivery code, or is "no deliveries during a dual outage" an accepted risk? | Recipient OTP (PD-12) makes every delivery depend on messaging. | **Ops-assisted fallback, audited**; or accept the risk | AUD2-018 |
+| Q2-11 | Unpaid **sender** dues: should they ever be written off (after what period), and what happens to the traveler's contingent credit linked to them? | PD-10 covers traveler write-off only; contingent credits linked to sender dues stay open forever. | **Write off after a configured period; void the linked contingent credits; report both** | AUD2-007 |
+
+Existing open items this audit depends on, unchanged: OQ-03 (DEC-052/057), OQ-10, OQ-12, OQ-16, OQ-17 (numbers), OQ-18, OQ-19 (vendors), OQ-20 (counsel/CA), T-5 (AD-14), T-15 (online outcomes).
